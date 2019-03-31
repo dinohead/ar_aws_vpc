@@ -1,0 +1,260 @@
+---
+- include: validate.yml
+
+- name: Ensure Virtual Private Cloud (VPC) exists
+  ec2_vpc_net:
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    state: present
+    cidr_block: "{{ aws_vpc_cidr_block }}"
+    name: "{{ aws_vpc_name + '_vpc' }}"
+    region: "{{ aws_vpc_reigon }}"
+    tenancy: default
+    multi_ok: false
+  register: task_result
+
+- set_fact:
+    aws_vpc_id: "{{ task_result.vpc.id }}"
+
+- name: Ensure Subnets exist
+  ec2_vpc_subnet:
+    assign_instances_ipv6: "{{ item.ipv6 | default( false ) }}"
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    az: "{{ item.az | default( omit ) }}"
+    cidr: "{{ item.cidr }}"
+    ipv6_cidr: "{{ item.ipv6_cidr | default( omit ) }}"
+    map_public: "{{ item.map_public | default( false ) }}"
+    purge_tags: "{{ item.purge_tags | default( true ) }}"
+    region: "{{ item.region | default( aws_vpc_reigon ) }}"
+    state: present
+    tags: "{{ item.tags | default( {} ) | combine ( {'Name': aws_vpc_name + '_' + item.name + '_subnet' }) }}"
+    vpc_id: "{{ aws_vpc_id }}"
+    wait: true
+  with_items: "{{ aws_vpc_subnets }}"
+  register: task_result
+
+# Build a new subnet list of dictionaries with the subnet ids
+- set_fact:
+    aws_vpc_subnets: []
+
+- set_fact:
+    aws_vpc_subnets: "{{ aws_vpc_subnets + [ item.item | combine( {'subnet_id': item.subnet.id}) ] }}"
+  with_items: "{{ task_result.results }}"
+
+- set_fact:
+    aws_vpc_public_subnet_id: "{{ (aws_vpc_subnets | selectattr('public', 'equalto', true ) | list | first).subnet_id }}"
+
+- debug:
+    var: aws_vpc_subnets
+
+- debug:
+    var: aws_vpc_public_subnet
+
+- name: Ensure Virtual Private Gateway (VPG) exists
+  ec2_vpc_vgw:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    vpc_id: "{{ aws_vpc_id }}"
+    name: "{{ aws_vpc_name + '_vpg' }}"
+    tags: "{{ aws_vpc_vpg_tags | default(omit) }}"
+  register: task_result
+
+- set_fact:
+    aws_vpc_vgw_id: "{{ task_result.vgw.id }}"
+
+- name: Ensure Internet Gateway (IGW) exists
+  ec2_vpc_igw:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    vpc_id: "{{ aws_vpc_id }}"
+    tags: "{{ aws_vpc_igw_tags | default( {} ) | combine ( {'Name': aws_vpc_name + '_igw' }) }}"
+  register: task_result
+
+- set_fact:
+    aws_vpc_igw_id: "{{ task_result.gateway_id }}"
+
+- name: Ensure NAT Gateway(s) exists
+  ec2_vpc_nat_gateway:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    if_exist_do_not_create: true
+    wait: true
+    subnet_id: "{{ aws_vpc_public_subnet_id }}"
+  register: task_result
+
+- debug:
+    var: task_result
+
+- set_fact:
+    aws_vpc_nat_id: "{{ task_result.nat_gateway_id }}"
+    aws_vpc_nat_eip_id: "{{ task_result.nat_gateway_addresses[0].allocation_id }}"
+    aws_vpc_nat_eni_id: "{{ task_result.nat_gateway_addresses[0].network_interface_id }}"
+
+- debug:
+    var: aws_vpc_nat_id
+
+- name: Add name tag to EC2 Elastic IP (EIP) created for NAT gateway
+  ec2_tag:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    resource: "{{ aws_vpc_nat_eip_id }}"
+    tags:
+      'Name': "{{ aws_vpc_name + '_nat_eip' }}"
+
+- name: Add name tag to NAT gateway
+  ec2_tag:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    resource: "{{ aws_vpc_nat_id }}"
+    tags:
+      'Name': "{{ aws_vpc_name + '_nat_gateway' }}"
+
+- name: Add name tag to NIC create for NAT gateway
+  ec2_tag:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    resource: "{{ aws_vpc_nat_eni_id }}"
+    tags:
+      'Name': "{{ aws_vpc_name + '_nat_eni' }}"
+
+- pause:
+    prompt: "Continue when VPC has been attached to transit gateway"
+
+- name: Ensure Subnet route tables exist (private)
+  ec2_vpc_route_table:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    vpc_id: "{{ aws_vpc_id }}"
+    tags:
+      'Name': "{{ aws_vpc_name + '_' + item.name + '_subnet'  + '_routes' }}"
+    subnets:
+      - '{{ item.cidr }}'
+    routes:
+      - dest: 0.0.0.0/0
+        gateway_id: "{{ aws_vpc_nat_id }}"
+      - dest: 172.16.0.0/15
+        gateway_id: "{{ aws_vpc_transit_gateway_id }}"
+      - dest: 10.0.0.0/8
+        gateway_id: "{{ aws_vpc_transit_gateway_id }}"
+  with_items: "{{ aws_vpc_subnets }}"
+  when: not item.public
+
+- name: Ensure Subnet route tables exist (public)
+  ec2_vpc_route_table:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    vpc_id: "{{ aws_vpc_id }}"
+    tags:
+      'Name': "{{ aws_vpc_name + '_' + item.name + '_subnet'  + '_routes' }}"
+    subnets:
+      - '{{ item.cidr }}'
+    routes:
+      - dest: 0.0.0.0/0
+        gateway_id: "{{ aws_vpc_igw_id }}"
+  with_items: "{{ aws_vpc_subnets }}"
+  when: item.public
+
+- name: Find the main route table
+  ec2_vpc_route_table_facts:
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    filters:
+      vpc_id: "{{ aws_vpc_id }}"
+      "association.main": "true"
+  register: task_result
+  delegate_to: localhost
+
+- debug:
+    var: task_result
+
+- set_fact:
+    aws_vpc_main_route_id: "{{ task_result.route_tables[0].id }}"
+
+- debug:
+    var: aws_vpc_main_route_id
+
+- name: Tag the main route table
+  ec2_tag:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    resource: "{{ aws_vpc_main_route_id }}"
+    tags:
+      'Name': "{{ aws_vpc_name + '_main_routes' }}"
+
+# Build private dictionary of Security groups because the
+# ec2_groups module doesn't support the omit filter for rules
+- set_fact:
+    aws_vpc_group_priv: []
+
+- set_fact:
+    temp_dict:
+      proto: "{{ item.proto }}"
+      ports: "{{ item.ports | default( omit ) }}"
+      from_port: "{{ item.from_port | default( omit ) }}"
+      to_port: "{{ item.to_port | default( omit ) }}"
+      cidr_ip: "{{ item.cidr_ip }}"
+      cidr_ipv6: "{{ item.cidr_ipv6 | default( omit ) }}"
+  with_items: "{{ aws_vpc_groups }}"
+  register: task_result
+
+- set_fact:
+    aws_vpc_group_priv: "{{ aws_vpc_group_priv + [{
+      'group_name': item.item.group_name,
+      'group_desc': ( item.item.group_desc | default(item.item.group_name)) ,
+      'rules': [ item.ansible_facts.temp_dict ]
+    }] }}"
+  with_items: "{{ task_result.results }}"
+
+- name: Create Security Groups
+  ec2_group:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    vpc_id: "{{ aws_vpc_id }}"
+    name:  "{{ item.group_name }}"
+    description: "{{ item.group_desc }}"
+    tags:
+      Name: "{{ aws_vpc_name + '_sg_' + item.group_name }}"
+    rules: "{{ item.rules }}"
+  with_items: "{{ aws_vpc_group_priv }}"
+
+- name: Find the default Security Group
+  ec2_group_facts:
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    filters:
+      vpc_id: "{{ aws_vpc_id }}"
+      group_name: 'default'
+  register: task_result
+
+- name: Tag the default security group
+  ec2_tag:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    resource: "{{ task_result.security_groups[0].group_id }}"
+    tags:
+      'Name': "{{ aws_vpc_name + '_sg_default' }}"
