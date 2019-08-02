@@ -130,9 +130,11 @@
     tags:
       'Name': "{{ aws_vpc_name + '_nat_eni' }}"
 
+#TODO Automate me
 - pause:
     prompt: "Continue when VPC has been attached to transit gateway"
 
+#TODO Unhardcode me
 - name: Ensure Subnet route tables exist (private)
   ec2_vpc_route_table:
     state: present
@@ -160,6 +162,7 @@
   with_items: "{{ aws_vpc_subnets }}"
   when: not item.public
 
+#TODO Unhardcode me
 - name: Ensure Subnet route tables exist (public)
   ec2_vpc_route_table:
     state: present
