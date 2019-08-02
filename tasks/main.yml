@@ -147,9 +147,15 @@
     routes:
       - dest: 0.0.0.0/0
         gateway_id: "{{ aws_vpc_nat_id }}"
-      - dest: 172.16.0.0/15
+      - dest: 172.16.0.0/16
         gateway_id: "{{ aws_vpc_transit_gateway_id }}"
-      - dest: 10.0.0.0/8
+      - dest: 172.17.0.0/16
+        gateway_id: "{{ aws_vpc_transit_gateway_id }}"
+      - dest: 10.50.0.0/16
+        gateway_id: "{{ aws_vpc_transit_gateway_id }}"
+      - dest: 10.51.0.0/16
+        gateway_id: "{{ aws_vpc_transit_gateway_id }}"
+      - dest: 192.168.0.0/16
         gateway_id: "{{ aws_vpc_transit_gateway_id }}"
   with_items: "{{ aws_vpc_subnets }}"
   when: not item.public
