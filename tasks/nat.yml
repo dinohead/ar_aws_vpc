@@ -1,0 +1,55 @@
+---
+
+- name: Ensure NAT Gateway(s) exists
+  ec2_vpc_nat_gateway:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    if_exist_do_not_create: true
+    wait: true
+    subnet_id: "{{ aws_vpc_public_subnet_id }}"
+  register: task_result
+
+- debug:
+    var: task_result
+    verbosity: 1
+
+- set_fact:
+    aws_vpc_nat_id: "{{ task_result.nat_gateway_id }}"
+    aws_vpc_nat_eip_id: "{{ task_result.nat_gateway_addresses[0].allocation_id }}"
+    aws_vpc_nat_eni_id: "{{ task_result.nat_gateway_addresses[0].network_interface_id }}"
+
+- debug:
+    var: aws_vpc_nat_id
+    verbosity: 1
+
+- name: Add name tag to EC2 Elastic IP (EIP) created for NAT gateway
+  ec2_tag:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    resource: "{{ aws_vpc_nat_eip_id }}"
+    tags:
+      'Name': "{{ aws_vpc_name + '_nat_eip' }}"
+
+- name: Add name tag to NAT gateway
+  ec2_tag:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    resource: "{{ aws_vpc_nat_id }}"
+    tags:
+      'Name': "{{ aws_vpc_name + '_nat_gateway' }}"
+
+- name: Add name tag to NIC create for NAT gateway
+  ec2_tag:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    resource: "{{ aws_vpc_nat_eni_id }}"
+    tags:
+      'Name': "{{ aws_vpc_name + '_nat_eni' }}"

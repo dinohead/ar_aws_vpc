@@ -2,4 +2,4 @@
 - fail:
     msg: "Each item in the 'aws_vpc_subnets' must define a 'name' key"
   when: item.name is undefined
-  with_items: "{{ aws_vpc_subnets }}"
+  loop: "{{ aws_vpc_subnets }}"

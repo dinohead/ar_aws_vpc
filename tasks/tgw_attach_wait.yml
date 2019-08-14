@@ -1,0 +1,27 @@
+---
+
+- block:
+
+    - name: PAUSE | wait a little bit (30 seconds)...
+      pause:
+        seconds: 30
+
+    - name: SHELL | check on transit gateway attachment status for VPC ID == {{ aws_vpc_id }}
+      shell: aws ec2 describe-transit-gateway-vpc-attachments --filters "Name=vpc-id,Values={{ aws_vpc_id }}"
+      register: tgw_attach_result
+
+    - name: SET_FACT | convert tgw_attach_result stdout to json
+      set_fact:
+        tgw_attach_result_json: "{{ tgw_attach_result.stdout | from_json }}"
+
+    - name: FAIL | tgw attachment not yet available
+      fail:
+        msg: "tgw_attach_result_json.TransitGatewayVpcAttachments[0].State != available --> state is: {{ tgw_attach_result_json.TransitGatewayVpcAttachments[0].State }}"
+      when: tgw_attach_result_json.TransitGatewayVpcAttachments[0].State != 'available'
+
+  rescue:
+
+    - debug:
+        msg: "TGW attachment not available - Retrying..."
+
+    - include_tasks: tgw_attach_wait.yml

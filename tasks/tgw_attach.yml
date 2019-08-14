@@ -1,0 +1,53 @@
+---
+
+- debug:
+    msg: "VPC id is: {{ aws_vpc_id }}"
+
+- debug:
+    msg: "TGW ID is: {{ aws_vpc_transit_gateway_id }}"
+
+- debug:
+    msg: "Public subnet ID is: {{ aws_vpc_public_subnet_id }}"
+
+#TODO Automate me
+# - pause:
+#     prompt: "Continue when VPC has been attached to transit gateway"
+
+- pause:
+    prompt: "Continue to attach the tgw..."
+
+- name: SHELL | attach tgw to vpc via AWS CLI
+  shell: |
+    aws ec2 create-transit-gateway-vpc-attachment \
+    --transit-gateway-id {{ aws_vpc_transit_gateway_id }} \
+    --vpc-id {{ aws_vpc_id }} \
+    --subnet-id {{ aws_vpc_public_subnet_id }} \
+    --options DnsSupport=enable,Ipv6Support=disable \
+    --tag-specifications 'ResourceType=transit-gateway-attachment,Tags=[{Key=Name,Value={{ aws_vpc_name }}_tgw_attachment}]'
+  register: task_result
+  # async: 600  # 10 minutes
+  # poll: 0  # 0 makes async and enabled async_status check below
+
+- debug:
+    var: task_result
+    verbosity: 0
+
+- include_tasks: tgw_attach_wait.yml
+
+# - name: 'AWS CLI - check on async task'
+#   async_status:
+#     jid: "{{ task_result.ansible_job_id }}"
+#   register: job_result
+#   until: job_result.TransitGatewayVpcAttachment.State == 'available'
+#   retries: 300
+
+# - name: SHELL | check on transit gateway attachment status
+#   shell: aws ec2 describe-transit-gateway-vpc-attachments --filters "Name=vpc-id,Values={{ aws_vpc_id }}"
+#   register: tgw_attach_result
+
+# - name: SET_FACT | convert tgw_attach_result stdout to json
+#   set_fact:
+#     tgw_attach_result_json: "{{ tgw_attach_result.stdout | from_json }}"
+
+- pause:
+    prompt: "Continue to proceed post tgw attach"

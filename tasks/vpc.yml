@@ -1,0 +1,16 @@
+---
+
+- name: Ensure Virtual Private Cloud (VPC) exists
+  ec2_vpc_net:
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    state: present
+    cidr_block: "{{ aws_vpc_cidr_block }}"
+    name: "{{ aws_vpc_name + '_vpc' }}"
+    region: "{{ aws_vpc_reigon }}"
+    tenancy: default
+    multi_ok: false
+  register: task_result
+
+- set_fact:
+    aws_vpc_id: "{{ task_result.vpc.id }}"
