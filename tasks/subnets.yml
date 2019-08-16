@@ -26,16 +26,50 @@
     aws_vpc_subnets: "{{ aws_vpc_subnets + [ item.item | combine( {'subnet_id': item.subnet.id}) ] }}"
   loop: "{{ task_result.results }}"
 
+- debug:
+    var: aws_vpc_subnets
+    verbosity: 0
+
 - set_fact:
     aws_vpc_public_subnet_id: "{{ (aws_vpc_subnets | selectattr('public', 'equalto', true ) | list | first).subnet_id }}"
 
-# - set_fact:
-#     aws_vpc_private_subnet_id: "{{ (aws_vpc_subnets | selectattr('private', 'equalto', true ) | list | first).subnet_id }}"
+- set_fact:
+    aws_vpc_public_subnets: "{{ (aws_vpc_subnets | selectattr('public', 'equalto', true ) | list) }}"
+
+- set_fact:
+    aws_vpc_public_subnet_ids: "{{ aws_vpc_public_subnets | map(attribute='subnet_id') | list }}"
 
 - debug:
-    var: aws_vpc_subnets
-    verbosity: 1
+    var: aws_vpc_public_subnet_id
+    verbosity: 0
 
 - debug:
-    var: aws_vpc_public_subnet
-    verbosity: 1
+    var: aws_vpc_public_subnets
+    verbosity: 0
+
+- debug:
+    var: aws_vpc_public_subnet_ids
+    verbosity: 0
+
+# don't check for private, true.  Instead, check for public false.
+
+- set_fact:
+    aws_vpc_private_subnet_id: "{{ (aws_vpc_subnets | selectattr('public', 'equalto', false ) | list | first).subnet_id }}"
+
+- set_fact:
+    aws_vpc_private_subnets: "{{ (aws_vpc_subnets | selectattr('public', 'equalto', false ) | list) }}"
+
+- set_fact:
+    aws_vpc_private_subnet_ids: "{{ aws_vpc_private_subnets | map(attribute='subnet_id') | list }}"
+
+- debug:
+    var: aws_vpc_private_subnet_id
+    verbosity: 0
+
+- debug:
+    var: aws_vpc_private_subnets
+    verbosity: 0
+
+- debug:
+    var: aws_vpc_private_subnet_ids
+    verbosity: 0

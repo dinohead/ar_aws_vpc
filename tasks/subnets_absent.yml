@@ -1,0 +1,11 @@
+---
+
+- name: Ensure Subnets absent
+  ec2_vpc_subnet:
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    state: absent
+    vpc_id: "{{ aws_vpc_id }}"
+    cidr: "{{ item.cidr_block }}"
+    wait: true
+  loop: "{{ facts_vpc_subnets.subnets }}"

@@ -1,0 +1,75 @@
+---
+
+#
+# The intent of this file is to gather facts about a VPC deployment merely
+# from the provided name of the VPC.  This is to facilitate tearing down (or,
+# deprovisioning) the VPC.
+#
+
+# this is just for testing non-existing VPCs
+# - set_fact:
+#     aws_vpc_name: 'does_not_exist'
+
+# We start with a VPC name
+- name: DEBUG | say my name
+  debug:
+    msg: "Hi, my name is: {{ aws_vpc_name }}"
+    verbosity: 0
+
+- name: EC2_VPC_NET_FACTS | just the VPC facts
+  ec2_vpc_net_facts:
+    filters:
+      "tag:Name": "{{ aws_vpc_name }}_vpc"
+  register: facts_vpc
+
+- name: DEBUG | show me the VPC facts
+  debug:
+    var: facts_vpc
+    verbosity: 0
+
+- name: initially assume no matches
+  set_fact:
+    aws_vpc_eligible_to_delete: false
+
+- name: do we have any matching VPC names?
+  set_fact:
+    aws_vpc_eligible_to_delete: true
+  when: ( facts_vpc.vpcs | length ) > 0
+
+#
+# NOTE: We're assuming VPCs are uniquely named and that our results only have
+# one matching one.  In the event we have more than one, we grab the first
+# on in the list.  Don't worry, we'll prompt (initially) before we delete
+#
+# We're also going to assume that the VPC was built by Ansible and, if it exists
+# we don't have to do a bunch of insane error checking/handling
+#
+
+- name: we have a winner
+  when: aws_vpc_eligible_to_delete | bool
+  block:
+
+    - name: SET_FACT | set some VPC facts we'll need
+      set_fact:
+        aws_vpc_id: "{{ (facts_vpc.vpcs | list | first).id }}"
+        aws_vpc_current_state: "{{ (facts_vpc.vpcs | list | first).state }}"
+
+    - name: EC2_VPC_SUBNET_FACTS | get subnets in VPC
+      ec2_vpc_subnet_facts:
+        filters:
+          vpc-id: "{{ aws_vpc_id }}"
+      register: facts_vpc_subnets
+
+    - name: DEBUG | show me the subnet facts
+      debug:
+        var: facts_vpc_subnets
+        verbosity: 0
+
+    - name: SET_FACT | subnet id list
+      set_fact:
+        aws_vpc_subnet_ids: "{{ facts_vpc_subnets.subnets | map(attribute='id') | list }}"
+
+    - name: DEBUG | show me the subnet id list
+      debug:
+        var: aws_vpc_subnet_ids
+        verbosity: 0

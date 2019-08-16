@@ -2,28 +2,55 @@
 - include_tasks: validate.yml
   tags: [ always, validate ]
 
-- include_tasks: vpc.yml
-  tags: [ vpc ]
+- name: ensure VPC is present
+  block:
 
-- include_tasks: subnets.yml
-  tags: [ subnets ]
+    - debug:
+        msg: "Spinning up VPC..."
 
-- include_tasks: vpg.yml
-  tags: [ vpg ]
+    - include_tasks: vpc.yml
+      tags: [ vpc ]
 
-- include_tasks: igw.yml
-  tags: [ igw ]
+    - include_tasks: subnets.yml
+      tags: [ subnets ]
 
-- include_tasks: nat.yml
-  tags: [ nat ]
+    - include_tasks: vpg.yml
+      tags: [ vpg ]
 
-- include_tasks: tgw_attach.yml
-  tags: [ tgw ]
-  vars:
-    ansible_connection: local
+    # - include_tasks: igw.yml
+    #   tags: [ igw ]
 
-- include_tasks: routes.yml
-  tags: [ routes ]
+    # - include_tasks: nat.yml
+    #   tags: [ nat ]
 
-- include_tasks: security.yml
-  tags: [ security ]
+    # - include_tasks: tgw_attach.yml
+    #   tags: [ tgw ]
+    #   vars:
+    #     ansible_connection: local
+
+    # - include_tasks: routes.yml
+    #   tags: [ routes ]
+
+    # - include_tasks: security.yml
+    #   tags: [ security ]
+
+  when: ( aws_vpc_state == 'present' )
+
+- name: ensure VPC is absent
+  block:
+
+    - debug:
+        msg: "Tearing down VPC..."
+
+    - include_tasks: vpc_facts.yml
+      tags: [ facts ]
+
+    # NOTE: this isn't necessary, you should be able to skip this and just
+    # delete the VPC at this point
+    - include_tasks: subnets_absent.yml
+      tags: [ subnets ]
+
+    - include_tasks: vpc_absent.yml
+      tags: [ vpc ]
+
+  when: ( aws_vpc_state == 'absent' )

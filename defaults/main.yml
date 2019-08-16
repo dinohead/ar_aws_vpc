@@ -6,6 +6,8 @@ aws_vpc_reigon: us-east-2
 
 aws_vpc_transit_gateway_id: tgw-02e4e8f7b0f40d6af
 
+aws_vpc_state: present
+
 # VPC Parameters
 aws_vpc_name: test_11
 aws_vpc_cidr_block: 172.16.20.0/23
