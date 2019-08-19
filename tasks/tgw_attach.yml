@@ -37,7 +37,7 @@
     aws ec2 create-transit-gateway-vpc-attachment \
     --transit-gateway-id {{ aws_vpc_transit_gateway_id }} \
     --vpc-id {{ aws_vpc_id }} \
-    --subnet-id {{ aws_vpc_public_subnet_ids | join(',') }} \
+    --subnet-id {{ aws_vpc_public_subnet_ids | join(' ') }} \
     --options DnsSupport=enable,Ipv6Support=disable \
     --tag-specifications 'ResourceType=transit-gateway-attachment,Tags=[{Key=Name,Value={{ aws_vpc_name }}_tgw_attachment}]'
 #   loop: "{{ aws_vpc_public_subnet_ids }}"
