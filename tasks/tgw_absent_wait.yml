@@ -22,7 +22,7 @@
         seconds: 30
 
     - name: SHELL | check on transit gateway attachment status for VPC ID == {{ aws_vpc_id }}
-      shell: aws ec2 describe-transit-gateway-vpc-attachments --filters "Name=vpc-id,Values={{ aws_vpc_id }}" "Name=state,Values=pending"
+      shell: aws ec2 describe-transit-gateway-vpc-attachments --filters "Name=vpc-id,Values={{ aws_vpc_id }}" "Name=state,Values=deleting"
       register: tgw_attach_result
       changed_when: false
 
@@ -30,23 +30,23 @@
       set_fact:
         tgw_attach_result_json: "{{ tgw_attach_result.stdout | from_json }}"
 
-    - name: FAIL | tgw attachment not yet available
+    - name: FAIL | tgw attachment still deleting
       fail:
-        msg: "tgw_attach_result_json.TransitGatewayVpcAttachments[0].State != available --> state is: {{ tgw_attach_result_json.TransitGatewayVpcAttachments[0].State }}"
-      # when: tgw_attach_result_json.TransitGatewayVpcAttachments[0].State != 'available'
+        msg: "tgw_attach_result_json.TransitGatewayVpcAttachments[0].State != deleted --> state is: {{ tgw_attach_result_json.TransitGatewayVpcAttachments[0].State }}"
+      # when: tgw_attach_result_json.TransitGatewayVpcAttachments[0].State != 'deleted'
       when: tgw_attach_result_json.TransitGatewayVpcAttachments | length > 0
 
   rescue:
 
     - debug:
-        msg: "TGW attachment not available - Retrying..."
+        msg: "TGW attachment not deleted - Retrying..."
         verbosity: 1
 
     - name: SET_FACT | increment loop counter
       set_fact:
         aws_vpc_txgw_loop_ctr: "{{ aws_vpc_txgw_loop_ctr | int + 1 }}"
 
-    - include_tasks: tgw_attach_wait.yml
+    - include_tasks: tgw_absent_wait.yml
       when: (
           ( aws_vpc_txgw_loop_ctr | int ) <= ( aws_vpc_txgw_loop_max | int )
         )

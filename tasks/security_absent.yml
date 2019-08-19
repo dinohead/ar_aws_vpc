@@ -1,0 +1,12 @@
+---
+
+- name: Delete Security Groups
+  ec2_group:
+    state: absent
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    vpc_id: "{{ aws_vpc_id }}"
+    group_id: "{{ item.group_id }}"
+  loop: "{{ facts_groups.security_groups }}"
+  when: item.group_name != 'default'

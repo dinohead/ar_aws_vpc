@@ -28,7 +28,7 @@
 
 - debug:
     var: aws_vpc_subnets
-    verbosity: 0
+    verbosity: 1
 
 - set_fact:
     aws_vpc_public_subnet_id: "{{ (aws_vpc_subnets | selectattr('public', 'equalto', true ) | list | first).subnet_id }}"
@@ -41,15 +41,15 @@
 
 - debug:
     var: aws_vpc_public_subnet_id
-    verbosity: 0
+    verbosity: 1
 
 - debug:
     var: aws_vpc_public_subnets
-    verbosity: 0
+    verbosity: 1
 
 - debug:
     var: aws_vpc_public_subnet_ids
-    verbosity: 0
+    verbosity: 1
 
 # don't check for private, true.  Instead, check for public false.
 
@@ -64,12 +64,12 @@
 
 - debug:
     var: aws_vpc_private_subnet_id
-    verbosity: 0
+    verbosity: 1
 
 - debug:
     var: aws_vpc_private_subnets
-    verbosity: 0
+    verbosity: 1
 
 - debug:
     var: aws_vpc_private_subnet_ids
-    verbosity: 0
+    verbosity: 1

@@ -1,5 +1,11 @@
 ---
 
+- debug:
+    msg: "NAT ID is: {{ (aws_vpc_nats | selectattr('subnet_id', 'equalto', item.subnet_id ) | list | first).aws_vpc_nat_id }}"
+    verbosity: 1
+  loop: "{{ aws_vpc_subnets }}"
+  when: not item.public
+
 #TODO Unhardcode me
 - name: Ensure Subnet route tables exist (private)
   ec2_vpc_route_table:
@@ -9,12 +15,13 @@
     region: "{{ aws_vpc_region }}"
     vpc_id: "{{ aws_vpc_id }}"
     tags:
-      'Name': "{{ aws_vpc_name + '_' + item.name + '_subnet'  + '_routes' }}"
+      'Name': "{{ aws_vpc_name + '_' + item.name + '_subnet'  + '_routes_' }}{{ subnet_loop_index }}"
     subnets:
       - '{{ item.cidr }}'
     routes:
       - dest: 0.0.0.0/0
-        gateway_id: "{{ aws_vpc_nat_id }}"
+        # gateway_id: "{{ aws_vpc_nat_id }}"
+        gateway_id: "{{ (aws_vpc_nats | selectattr('subnet_id', 'equalto', item.subnet_id ) | list | first).aws_vpc_nat_id }}"
       - dest: 172.16.0.0/16
         gateway_id: "{{ aws_vpc_transit_gateway_id }}"
       - dest: 172.17.0.0/16
@@ -27,6 +34,8 @@
         gateway_id: "{{ aws_vpc_transit_gateway_id }}"
   loop: "{{ aws_vpc_subnets }}"
   when: not item.public
+  loop_control:
+    index_var: subnet_loop_index
 
 #TODO Unhardcode me
 - name: Ensure Subnet route tables exist (public)
@@ -37,7 +46,7 @@
     region: "{{ aws_vpc_region }}"
     vpc_id: "{{ aws_vpc_id }}"
     tags:
-      'Name': "{{ aws_vpc_name + '_' + item.name + '_subnet'  + '_routes' }}"
+      'Name': "{{ aws_vpc_name + '_' + item.name + '_subnet'  + '_routes_' }}{{ subnet_loop_index }}"
     subnets:
       - '{{ item.cidr }}'
     routes:
@@ -45,6 +54,8 @@
         gateway_id: "{{ aws_vpc_igw_id }}"
   loop: "{{ aws_vpc_subnets }}"
   when: item.public
+  loop_control:
+    index_var: subnet_loop_index
 
 - name: Find the main route table
   ec2_vpc_route_table_facts:
@@ -59,12 +70,14 @@
 
 - debug:
     var: task_result
+    verbosity: 1
 
 - set_fact:
     aws_vpc_main_route_id: "{{ task_result.route_tables[0].id }}"
 
 - debug:
     var: aws_vpc_main_route_id
+    verbosity: 1
 
 - name: Tag the main route table
   ec2_tag:

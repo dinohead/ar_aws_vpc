@@ -1,0 +1,11 @@
+---
+
+- name: Ensure Internet Gateway (IGW) is absent
+  ec2_vpc_igw:
+    state: absent
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    vpc_id: "{{ aws_vpc_id }}"
+    region: "{{ aws_vpc_reigon }}"
+  # loop: "{{ aws_vpc_igw_ids }}"
+  register: task_result

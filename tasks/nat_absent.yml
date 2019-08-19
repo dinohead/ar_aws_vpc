@@ -1,0 +1,14 @@
+---
+
+- name: Ensure NAT gateways absent
+  ec2_vpc_nat_gateway:
+    state: absent
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    nat_gateway_id: "{{ item.nat_gateway_id }}"
+    region: "{{ aws_vpc_reigon }}"
+    release_eip: true
+    wait: true
+    wait_timeout: 600
+  loop: "{{ facts_nat_gateways.result }}"
+  register: task_result
