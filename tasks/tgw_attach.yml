@@ -1,0 +1,72 @@
+---
+
+#
+# This set of tasks exist to work around an open Ansible issue:
+#
+# see: # see https://github.com/ansible/ansible/issues/55823
+#
+
+- debug:
+    msg: "VPC id is: {{ aws_vpc_id }}"
+    verbosity: 1
+
+- debug:
+    msg: "TGW ID is: {{ aws_vpc_transit_gateway_id }}"
+    verbosity: 1
+
+- debug:
+    # msg: "Public subnet ID is: {{ aws_vpc_public_subnet_id }}"
+    msg: "Public subnet IDs are: {{ aws_vpc_public_subnet_ids }}"
+    verbosity: 1
+
+# For manual testing
+# - pause:
+#     prompt: "Continue to attach the tgw..."
+
+- name: SHELL | check if any transit gateway attachments are currently available
+  shell: aws ec2 describe-transit-gateway-vpc-attachments --filters "Name=vpc-id,Values={{ aws_vpc_id }}" "Name=state,Values=available"
+  register: tgw_attach_result
+  changed_when: false
+
+- name: SET_FACT | convert tgw_attach_result stdout to json
+  set_fact:
+    tgw_attach_result_json: "{{ tgw_attach_result.stdout | from_json }}"
+
+- name: SHELL | attach tgw to vpc via AWS CLI
+  shell: |
+    aws ec2 create-transit-gateway-vpc-attachment \
+    --transit-gateway-id {{ aws_vpc_transit_gateway_id }} \
+    --vpc-id {{ aws_vpc_id }} \
+    --subnet-id {{ aws_vpc_public_subnet_ids | join(' ') }} \
+    --options DnsSupport=enable,Ipv6Support=disable \
+    --tag-specifications 'ResourceType=transit-gateway-attachment,Tags=[{Key=Name,Value={{ aws_vpc_name }}_tgw_attachment}]'
+#   loop: "{{ aws_vpc_public_subnet_ids }}"
+  register: task_result
+  when: (
+      tgw_attach_result_json.TransitGatewayVpcAttachments | length == 0
+    )
+
+- debug:
+    var: task_result
+    verbosity: 1
+
+#
+# This is trippy AF, but start our recursive wait
+#
+- name: SET_FACT | init loop counter to 0
+  set_fact:
+    aws_vpc_txgw_loop_ctr: 0
+    aws_vpc_txgw_loop_max: "{{ aws_vpc_txgw_loop_max | default('9') }}"
+
+- include_tasks: tgw_attach_wait.yml
+  when: (
+      tgw_attach_result_json.TransitGatewayVpcAttachments | length == 0
+    )
+
+#
+# If/when we get here, the VPC is attached to the transit gateway
+#
+
+# For manual testing
+# - pause:
+#     prompt: "Continue to proceed post tgw attach"

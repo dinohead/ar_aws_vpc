@@ -1,0 +1,14 @@
+---
+
+- name: Ensure Internet Gateway (IGW) exists
+  ec2_vpc_igw:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    vpc_id: "{{ aws_vpc_id }}"
+    tags: "{{ aws_vpc_igw_tags | default( {} ) | combine ( {'Name': aws_vpc_name + '_igw' }) }}"
+  register: task_result
+
+- set_fact:
+    aws_vpc_igw_id: "{{ task_result.gateway_id }}"

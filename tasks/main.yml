@@ -1,0 +1,82 @@
+---
+- include_tasks: validate.yml
+  tags: [ always, validate ]
+
+- name: ensure VPC is present
+  block:
+
+    - debug:
+        msg: "Spinning up VPC..."
+
+    - include_tasks: vpc.yml
+      tags: [ vpc ]
+
+    - include_tasks: subnets.yml
+      tags: [ subnets ]
+
+    - include_tasks: vpg.yml
+      tags: [ vpg ]
+
+    - include_tasks: igw.yml
+      tags: [ igw ]
+
+    - include_tasks: nat.yml
+      tags: [ nat ]
+
+    - include_tasks: tgw_attach.yml
+      tags: [ tgw ]
+      vars:
+        ansible_connection: local
+
+    - include_tasks: routes.yml
+      tags: [ routes ]
+
+    - include_tasks: security.yml
+      tags: [ security ]
+
+  when: ( aws_vpc_state == 'present' )
+
+- name: ensure VPC is absent
+  block:
+
+    - debug:
+        msg: "Tearing down VPC..."
+
+    - include_tasks: vpc_facts.yml
+      tags: [ facts, always ]
+
+    - include_tasks: security_absent.yml
+      tags: [ security ]
+
+    - include_tasks: routes_absent.yml
+      tags: [ routes ]
+
+    - include_tasks: tgw_absent.yml
+      when: tgw_attach_result_json.TransitGatewayVpcAttachments | length > 0
+      tags: [ tgw ]
+
+    - include_tasks: nat_absent.yml
+      tags: [ nat ]
+
+    - include_tasks: igw_absent.yml
+      tags: [ igw ]
+
+    - include_tasks: vpg_absent.yml
+      tags: [ vpg, vgw ]
+
+    - include_tasks: subnets_absent.yml
+      tags: [ subnets ]
+
+    - include_tasks: nat_absent.yml
+      tags: [ nat ]
+
+    - set_fact:
+        facts_route_tables: "{{ facts_route_tables_main }}"
+
+    - include_tasks: routes_absent.yml
+      tags: [ routes ]
+
+    - include_tasks: vpc_absent.yml
+      tags: [ vpc ]
+
+  when: ( aws_vpc_state == 'absent' )

@@ -1,0 +1,187 @@
+---
+
+#
+# The intent of this file is to gather facts about a VPC deployment merely
+# from the provided name of the VPC.  This is to facilitate tearing down (or,
+# deprovisioning) the VPC.
+#
+
+# this is just for testing non-existing VPCs
+# - set_fact:
+#     aws_vpc_name: 'does_not_exist'
+
+# We start with a VPC name
+- name: DEBUG | say my name
+  debug:
+    msg: "Hi, my name is: {{ aws_vpc_name }}"
+    verbosity: 1
+
+- name: EC2_VPC_NET_FACTS | just the VPC facts
+  ec2_vpc_net_facts:
+    filters:
+      "tag:Name": "{{ aws_vpc_name }}_vpc"
+  register: facts_vpc
+
+- name: DEBUG | show me the VPC facts
+  debug:
+    var: facts_vpc
+    verbosity: 1
+
+- name: initially assume no matches
+  set_fact:
+    aws_vpc_eligible_to_delete: false
+
+- name: do we have any matching VPC names?
+  set_fact:
+    aws_vpc_eligible_to_delete: true
+  when: ( facts_vpc.vpcs | length ) > 0
+
+#
+# NOTE: We're assuming VPCs are uniquely named and that our results only have
+# one matching one.  In the event we have more than one, we grab the first
+# on in the list.  Don't worry, we'll prompt (initially) before we delete
+#
+# We're also going to assume that the VPC was built by Ansible and, if it exists
+# we don't have to do a bunch of insane error checking/handling
+#
+
+- name: we have a winner
+  when: aws_vpc_eligible_to_delete | bool
+  block:
+
+    - name: SET_FACT | set some VPC facts we'll need
+      set_fact:
+        aws_vpc_id: "{{ (facts_vpc.vpcs | list | first).id }}"
+        aws_vpc_current_state: "{{ (facts_vpc.vpcs | list | first).state }}"
+
+    - name: EC2_VPC_SUBNET_FACTS | get subnets in VPC
+      ec2_vpc_subnet_facts:
+        filters:
+          vpc-id: "{{ aws_vpc_id }}"
+      register: facts_vpc_subnets
+
+    - name: DEBUG | show me the subnet facts
+      debug:
+        var: facts_vpc_subnets
+        verbosity: 1
+
+    - name: SET_FACT | subnet id list
+      set_fact:
+        aws_vpc_subnet_ids: "{{ facts_vpc_subnets.subnets | map(attribute='id') | list }}"
+
+    - name: DEBUG | show me the subnet id list
+      debug:
+        var: aws_vpc_subnet_ids
+        verbosity: 1
+
+    - name: EC2_VPC_VGW_FACTS | get vpgs in VPC
+      ec2_vpc_vgw_facts:
+        filters:
+          attachment.vpc-id: "{{ aws_vpc_id }}"
+      register: facts_vpc_vgws
+
+    - name: DEBUG | show me the vgw facts
+      debug:
+        var: facts_vpc_vgws
+        verbosity: 1
+
+    - name: SET_FACT | vgw id list
+      set_fact:
+        aws_vpc_vgw_ids: "{{ facts_vpc_vgws.virtual_gateways | map(attribute='vpn_gateway_id') | list }}"
+
+    - name: DEBUG | show me the vgw id list
+      debug:
+        var: aws_vpc_vgw_ids
+        verbosity: 1
+
+    - name: EC2_VPC_IGW_FACTS | get igws in VPC
+      ec2_vpc_igw_facts:
+        filters:
+          attachment.vpc-id: "{{ aws_vpc_id }}"
+      register: facts_vpc_igws
+
+    - name: DEBUG | show me the igw facts
+      debug:
+        var: facts_vpc_igws
+        verbosity: 1
+
+    - name: SET_FACT | igw id list
+      set_fact:
+        aws_vpc_igw_ids: "{{ facts_vpc_igws.internet_gateways | map(attribute='internet_gateway_id') | list }}"
+
+    - name: DEBUG | show me the igw id list
+      debug:
+        var: aws_vpc_igw_ids
+        verbosity: 1
+
+    - name: EC2_VPC_NAT_GATEWAY_FACTS | get subnets in VPC
+      ec2_vpc_nat_gateway_facts:
+        filters:
+          vpc-id: "{{ aws_vpc_id }}"
+      register: facts_nat_gateways
+
+    - name: DEBUG | show me the nat facts
+      debug:
+        var: facts_nat_gateways
+        verbosity: 1
+
+    - name: SHELL | check if any transit gateway attachments are currently available
+      shell: aws ec2 describe-transit-gateway-vpc-attachments --filters "Name=vpc-id,Values={{ aws_vpc_id }}" "Name=state,Values=available"
+      register: tgw_attach_result
+      changed_when: false
+
+    - name: SET_FACT | convert tgw_attach_result stdout to json
+      set_fact:
+        tgw_attach_result_json: "{{ tgw_attach_result.stdout | from_json }}"
+
+    - name: DEBUG | show me the transit gateway attachment facts
+      debug:
+        var: tgw_attach_result_json
+        verbosity: 1
+
+    - name: SET_FACT | aws_vpc_transit_gateway_attachment_id
+      set_fact:
+        aws_vpc_transit_gateway_attachment_id: "{{ tgw_attach_result_json.TransitGatewayVpcAttachments[0].TransitGatewayAttachmentId | default('nonexistant') }}"
+      when: tgw_attach_result_json.TransitGatewayVpcAttachments | length > 0
+
+    - name: Find the route (non-main) tables
+      ec2_vpc_route_table_facts:
+        aws_access_key: "{{ aws_vpc_aws_access_key }}"
+        aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+        region: "{{ aws_vpc_region }}"
+        filters:
+          vpc_id: "{{ aws_vpc_id }}"
+          "association.main": "false"
+      register: facts_route_tables
+      delegate_to: localhost
+
+    - name: Find the route (main) tables
+      ec2_vpc_route_table_facts:
+        aws_access_key: "{{ aws_vpc_aws_access_key }}"
+        aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+        region: "{{ aws_vpc_region }}"
+        filters:
+          vpc_id: "{{ aws_vpc_id }}"
+          "association.main": "false"
+      register: facts_route_tables_main
+      delegate_to: localhost
+
+    - name: DEBUG | facts_route_tables
+      debug:
+        var: facts_route_tables
+        verbosity: 1
+
+    - name: Find the security groups
+      ec2_group_facts:
+        aws_access_key: "{{ aws_vpc_aws_access_key }}"
+        aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+        region: "{{ aws_vpc_region }}"
+        filters:
+          vpc_id: "{{ aws_vpc_id }}"
+          # group_name: 'default'
+      register: facts_groups
+
+    - name: DEBUG | facts_groups
+      debug:
+        var: facts_groups
+        verbosity: 1

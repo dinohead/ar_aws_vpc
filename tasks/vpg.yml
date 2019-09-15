@@ -1,0 +1,15 @@
+---
+
+- name: Ensure Virtual Private Gateway (VPG) exists
+  ec2_vpc_vgw:
+    state: present
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    vpc_id: "{{ aws_vpc_id }}"
+    name: "{{ aws_vpc_name + '_vpg' }}"
+    tags: "{{ aws_vpc_vpg_tags | default(omit) }}"
+  register: task_result
+
+- set_fact:
+    aws_vpc_vgw_id: "{{ task_result.vgw.id }}"

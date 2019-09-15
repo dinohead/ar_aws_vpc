@@ -1,0 +1,13 @@
+---
+
+- name: Ensure route tables absent
+  ec2_vpc_route_table:
+    state: absent
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    region: "{{ aws_vpc_region }}"
+    vpc_id: "{{ aws_vpc_id }}"
+    lookup: id
+    route_table_id: "{{ item.id }}"
+  loop: "{{ facts_route_tables.route_tables }}"
+  

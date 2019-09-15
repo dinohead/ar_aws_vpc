@@ -1,0 +1,14 @@
+---
+
+- fail:
+    msg: "Your VPC must have a name"
+  when: aws_vpc_name is undefined
+
+- fail:
+    msg: "Your VPC must have a CIDR block"
+  when: aws_vpc_cidr_block is undefined
+
+- fail:
+    msg: "Each item in the 'aws_vpc_subnets' must define a 'name' key"
+  when: item.name is undefined
+  loop: "{{ aws_vpc_subnets }}"

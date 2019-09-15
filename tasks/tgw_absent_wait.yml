@@ -1,0 +1,54 @@
+---
+
+#
+# This set of tasks exist to work around an open Ansible issue:
+#
+# see: # see https://github.com/ansible/ansible/issues/55823
+#
+# This is a recursive wait and I have no idea how dangerous it is.  In its
+# simplest form, it should wait indefinitely.  I'm going to try to add a
+# counter and logic so it kills itself after some sane number of tries.
+#
+
+- block:
+
+    - name: DEBUG | how many times?
+      debug:
+        msg: "We've waited {{ aws_vpc_txgw_loop_ctr }} times."
+        verbosity: 1
+
+    - name: PAUSE | wait a little bit (30 seconds)...
+      pause:
+        seconds: 30
+
+    - name: SHELL | check on transit gateway attachment status for VPC ID == {{ aws_vpc_id }}
+      shell: aws ec2 describe-transit-gateway-vpc-attachments --filters "Name=vpc-id,Values={{ aws_vpc_id }}" "Name=state,Values=deleting"
+      register: tgw_attach_result
+      changed_when: false
+
+    - name: SET_FACT | convert tgw_attach_result stdout to json
+      set_fact:
+        tgw_attach_result_json: "{{ tgw_attach_result.stdout | from_json }}"
+
+    - name: FAIL | tgw attachment still deleting
+      fail:
+        msg: "tgw_attach_result_json.TransitGatewayVpcAttachments[0].State != deleted --> state is: {{ tgw_attach_result_json.TransitGatewayVpcAttachments[0].State }}"
+      # when: tgw_attach_result_json.TransitGatewayVpcAttachments[0].State != 'deleted'
+      when: tgw_attach_result_json.TransitGatewayVpcAttachments | length > 0
+
+  rescue:
+
+    - debug:
+        msg: "TGW attachment not deleted - Retrying..."
+        verbosity: 1
+
+    - name: SET_FACT | increment loop counter
+      set_fact:
+        aws_vpc_txgw_loop_ctr: "{{ aws_vpc_txgw_loop_ctr | int + 1 }}"
+
+    - include_tasks: tgw_absent_wait.yml
+      when: (
+          ( aws_vpc_txgw_loop_ctr | int ) <= ( aws_vpc_txgw_loop_max | int )
+        )
+
+- meta: clear_host_errors

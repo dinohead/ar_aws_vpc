@@ -1,0 +1,11 @@
+---
+
+- name: Ensure Virtual Private Gateway (VPG) is absent
+  ec2_vpc_vgw:
+    state: absent
+    aws_access_key: "{{ aws_vpc_aws_access_key }}"
+    aws_secret_key: "{{ aws_vpc_aws_secret_key }}"
+    vpn_gateway_id: "{{ item }}"
+    region: "{{ aws_vpc_reigon }}"
+  loop: "{{ aws_vpc_vgw_ids }}"
+  register: task_result

@@ -1,0 +1,29 @@
+---
+# Subscription Parameters
+aws_vpc_aws_access_key: DAKL384JFJAS8FJAF848
+aws_vpc_aws_secret_key: NMI&74idjINdie6784/Hhd85UDjd859DJDidj384
+aws_vpc_reigon: us-east-2
+
+aws_vpc_transit_gateway_id: tgw-02e4e8f7b0f40d6af
+
+aws_vpc_state: present
+
+# VPC Parameters
+aws_vpc_name: test_11
+aws_vpc_cidr_block: 172.16.20.0/23
+aws_vpc_tenancy: default
+
+aws_vpc_subnets:
+  - name: private
+    cidr: 172.16.20.0/24
+    public: false
+  - name: public
+    cidr: 172.16.21.0/24
+    public: true
+
+aws_vpc_groups:
+  - group_name: ssh
+    group_desc: Allows ssh to instance
+    proto: tcp
+    ports: [ 22 ]
+    cidr_ip: 0.0.0.0/0
